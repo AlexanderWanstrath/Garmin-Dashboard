@@ -15,6 +15,9 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.scripts]
+runlog = "runlog.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
 
