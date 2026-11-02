@@ -1,0 +1,33 @@
+# Copy this file to config.yaml and fill in your own values.
+# config.yaml is ignored by git and must never be committed.
+
+athlete:
+  name: Your Name
+  timezone: Europe/Berlin
+
+events:
+  - name: 10 km race
+    date: 2030-01-01
+    goal: "45:00"        # optional
+  - name: Marathon
+    date: 2030-04-01
+
+baselines:
+  hrv_ms: {low: 50, high: 80}
+  resting_hr_bpm: 55
+
+heart_rate_zones:
+  source: garmin        # use the zones from the Garmin profile; override below if needed
+  override: null
+
+warnings:
+  weekly_volume_increase_pct: 10
+  hrv_below_baseline_days: 3       # consecutive days below hrv_ms.low
+  resting_hr_above_baseline_bpm: 5
+  tendon_pain_max: 2               # scale 0 to 10
+  tempo_faster_than_plan_pct: 3
+
+metrics:
+  long_run_min_km: 14              # runs from this distance count as long runs
+  decoupling_warmup_min: 10        # minutes excluded at the start
+  easy_zones: [1, 2]

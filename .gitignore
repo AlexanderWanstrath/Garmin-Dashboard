@@ -1,0 +1,28 @@
+# Personal data: never commit
+data/
+raw_*/
+output/
+notebooks/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.fit
+.env
+config.yaml
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
