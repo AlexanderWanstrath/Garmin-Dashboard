@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -25,3 +26,17 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ConfigError(f"{path} must contain a mapping at the top level")
     return data
+
+
+def data_dir(config: dict[str, Any]) -> Path:
+    return Path((config.get("paths") or {}).get("data_dir") or "data")
+
+
+def sync_start_date(config: dict[str, Any]) -> date | None:
+    value = (config.get("sync") or {}).get("start_date")
+    if value is None or isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as exc:
+        raise ConfigError(f"sync.start_date must be a date like 2026-09-01, got {value!r}") from exc

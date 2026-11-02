@@ -167,6 +167,8 @@ running-analytics-dashboard/
 
 ## 7. Stufenplan
 
+**Stand (2026-11-02):** Stufen 0, 1a und 1b sind abgeschlossen. `runlog sync` lädt Aktivitäten (inkl. FIT-Sekundenwerte, Laps, VO2max) und Gesundheitsdaten in `data/runlog.db`. Zweiter Aufruf lädt nur Neues, Gesundheitsdaten der letzten 3 Tage werden neu geladen, weil Garmin sie nachträglich ergänzt.
+
 Jede Stufe endet mit einem lauffähigen Zwischenstand und einem Commit. Nach jeder Stufe kurz prüfen, ob noch etwas Persönliches im Git-Index liegt (`git status`, `git diff --cached`).
 
 | Stufe | Inhalt | Fertig, wenn |

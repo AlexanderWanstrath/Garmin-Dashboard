@@ -1,6 +1,12 @@
 # Copy this file to config.yaml and fill in your own values.
 # config.yaml is ignored by git and must never be committed.
 
+paths:
+  data_dir: data                 # database (runlog.db) and FIT files; ignored by git
+
+sync:
+  start_date: null               # e.g. 2026-09-01; null = full activity history
+
 athlete:
   name: Your Name
   timezone: Europe/Berlin
