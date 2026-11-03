@@ -35,6 +35,8 @@ runlog check                         # traffic light, warnings, comparison with 
 claude mcp add runlog --scope local -- <project>/.venv/Scripts/runlog.exe --config <project>/config.yaml mcp
 ```
 
+If the VS Code extension does not pick up the local registration (it can see the project path with a different drive-letter case on Windows), register it with `--scope user` instead; the server is read-only and its config path is absolute.
+
 Tools: `get_recent_runs`, `get_run_details`, `get_weekly_volume`, `get_intensity_distribution`, `get_recovery_status`, `get_warnings`, `get_plan_status`, `get_countdown`, `get_manual_entries`.
 
 `.claude/settings.json` additionally denies Claude's file tools access to `~/.config/garmin/`.
