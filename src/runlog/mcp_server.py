@@ -17,7 +17,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
-from runlog import db, tools
+from runlog import config, db, tools
 from runlog.config import DEFAULT_CONFIG_PATH, ConfigError, load_config
 from runlog.plan import load_plan
 
@@ -40,11 +40,9 @@ class Settings:
         except ConfigError:
             if self.config_path.exists():
                 raise
-            self.config = {}
-        paths = self.config.get("paths") or {}
-        base = self.config_path.parent
-        self.db_path = base / (paths.get("data_dir") or "data") / "runlog.db"
-        self.plan_path = base / (paths.get("plan_file") or "plan.yaml")
+            self.config = {config.BASE_KEY: str(self.config_path.parent)}
+        self.db_path = config.data_dir(self.config) / "runlog.db"
+        self.plan_path = config.plan_path(self.config)
 
     def call(self, fn: Callable[..., Any], **kwargs: Any) -> Any:
         """Run a tool with a fresh read-only connection, so new syncs and plan edits show up immediately."""

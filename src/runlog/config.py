@@ -25,11 +25,24 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
         raise ConfigError(f"{path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         raise ConfigError(f"{path} must contain a mapping at the top level")
+    # Relative paths in the config mean "next to the config file", not "in the working directory".
+    data[BASE_KEY] = str(path.resolve().parent)
     return data
 
 
+BASE_KEY = "_config_dir"
+
+
+def _resolve(config: dict[str, Any], value: str) -> Path:
+    return Path(config.get(BASE_KEY) or ".") / value
+
+
 def data_dir(config: dict[str, Any]) -> Path:
-    return Path((config.get("paths") or {}).get("data_dir") or "data")
+    return _resolve(config, (config.get("paths") or {}).get("data_dir") or "data")
+
+
+def plan_path(config: dict[str, Any]) -> Path:
+    return _resolve(config, (config.get("paths") or {}).get("plan_file") or "plan.yaml")
 
 
 def sync_start_date(config: dict[str, Any]) -> date | None:

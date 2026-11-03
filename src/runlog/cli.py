@@ -12,14 +12,13 @@ from typing import Any
 from runlog import __version__
 from runlog.config import DEFAULT_CONFIG_PATH
 
-# Command name -> (help text, roadmap stage that implements it).
 COMMANDS = {
-    "sync": ("Fetch new activities and health data from Garmin into the local database", "1b"),
-    "log": ("Record the morning check (patellar tendon, legs, hip) or fueling of a run", "1d"),
-    "check": ("Show the morning check, warnings and the comparison with the training plan", "1d"),
-    "build": ("Generate the dashboard HTML from the local database", "1e"),
-    "demo": ("Generate a dashboard from synthetic data", "1f"),
-    "mcp": ("Start the read-only MCP server for Claude Code", "1g"),
+    "sync": "Fetch new activities and health data from Garmin into the local database",
+    "log": "Record the morning check (patellar tendon, legs, hip) or fueling of a run",
+    "check": "Show the morning check, warnings and the comparison with the training plan",
+    "build": "Generate the dashboard HTML from the local database",
+    "demo": "Generate a dashboard from synthetic data",
+    "mcp": "Start the read-only MCP server for Claude Code",
 }
 
 
@@ -33,8 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", metavar="<command>")
     sub = {
-        name: subparsers.add_parser(name, help=help_text, description=help_text)
-        for name, (help_text, _stage) in COMMANDS.items()
+        name: subparsers.add_parser(name, help=help_text, description=help_text) for name, help_text in COMMANDS.items()
     }
 
     log = sub["log"]
@@ -56,6 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--output", default="output/dashboard.html", help="HTML file to write")
     build.add_argument("--date", type=date.fromisoformat, default=None, help="build as of YYYY-MM-DD (default: today)")
     build.add_argument("--open", action="store_true", help="open the dashboard in the browser afterwards")
+
+    demo = sub["demo"]
+    demo.add_argument("--output", default="output/demo/index.html", help="HTML file to write")
+    demo.add_argument("--data-dir", default="output/demo-data", help="folder for the synthetic database and plan")
+    demo.add_argument("--open", action="store_true", help="open the dashboard in the browser afterwards")
     return parser
 
 
@@ -143,7 +146,7 @@ def cmd_check(cfg: dict[str, Any], args: argparse.Namespace) -> int:
     from runlog.plan import PlanError, load_plan
     from runlog.report import build_report
 
-    plan_path = Path((cfg.get("paths") or {}).get("plan_file") or "plan.yaml")
+    plan_path = config.plan_path(cfg)
     try:
         plan = load_plan(plan_path) if plan_path.exists() else None
     except PlanError as exc:
@@ -164,7 +167,7 @@ def cmd_build(cfg: dict[str, Any], args: argparse.Namespace) -> int:
     from runlog.dashboard.build import build
     from runlog.plan import PlanError, load_plan
 
-    plan_path = Path((cfg.get("paths") or {}).get("plan_file") or "plan.yaml")
+    plan_path = config.plan_path(cfg)
     try:
         plan = load_plan(plan_path) if plan_path.exists() else None
     except PlanError as exc:
@@ -188,6 +191,31 @@ def cmd_build(cfg: dict[str, Any], args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_demo(args: argparse.Namespace) -> int:
+    """Generate the synthetic athlete and build the dashboard from it. Never touches real data."""
+    import webbrowser
+
+    from runlog import config, db, tools
+    from runlog.dashboard.build import build
+    from runlog.demo import generate
+    from runlog.plan import load_plan
+
+    target = generate(Path(args.data_dir))
+    cfg = config.load_config(target / "config.yaml")
+    conn = db.connect_readonly(target / "data" / "runlog.db")
+    try:
+        html = build(tools.Context(conn, cfg, load_plan(target / "plan.yaml"), date.today()))
+    finally:
+        conn.close()
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(html, encoding="utf-8")
+    print(f"Demo dashboard (synthetic data): {output.resolve()}")
+    if args.open:
+        webbrowser.open(output.resolve().as_uri())
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -202,20 +230,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         build_server(args.config).run("stdio")
         return 0
-    if args.command in ("sync", "log", "check", "build"):
-        cfg = load_cfg(args.config)
-        if cfg is None:
-            return 1
-        if args.command == "sync":
-            return cmd_sync(cfg, args.reparse)
-        if args.command == "log":
-            return cmd_log(cfg, args)
-        if args.command == "build":
-            return cmd_build(cfg, args)
-        return cmd_check(cfg, args)
-    stage = COMMANDS[args.command][1]
-    print(f"runlog {args.command}: not implemented yet (roadmap stage {stage})", file=sys.stderr)
-    return 1
+    if args.command == "demo":
+        return cmd_demo(args)
+    cfg = load_cfg(args.config)
+    if cfg is None:
+        return 1
+    if args.command == "sync":
+        return cmd_sync(cfg, args.reparse)
+    if args.command == "log":
+        return cmd_log(cfg, args)
+    if args.command == "build":
+        return cmd_build(cfg, args)
+    return cmd_check(cfg, args)
 
 
 if __name__ == "__main__":
