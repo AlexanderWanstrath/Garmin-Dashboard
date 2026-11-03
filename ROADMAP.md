@@ -167,7 +167,10 @@ running-analytics-dashboard/
 
 ## 7. Stufenplan
 
-**Stand (2026-11-02):** Stufen 0, 1a und 1b sind abgeschlossen. `runlog sync` lädt Aktivitäten (inkl. FIT-Sekundenwerte, Laps, VO2max) und Gesundheitsdaten in `data/runlog.db`. Zweiter Aufruf lädt nur Neues, Gesundheitsdaten der letzten 3 Tage werden neu geladen, weil Garmin sie nachträglich ergänzt.
+**Stand (2026-11-03):** Stufen 0, 1a, 1b und 1c sind abgeschlossen.
+- `runlog sync` lädt Aktivitäten (inkl. FIT-Sekundenwerte, Laps, VO2max) und Gesundheitsdaten in `data/runlog.db`. Zweiter Aufruf lädt nur Neues, Gesundheitsdaten der letzten 3 Tage werden neu geladen, weil Garmin sie nachträglich ergänzt.
+- Kennzahlen in `src/runlog/metrics/` als reine Python-Funktionen (ohne pandas, die Datenmengen sind klein): Wochenvolumen mit Steigerungsrate, Long Runs, aerobe Entkopplung, Efficiency Factor lockerer Läufe, Intensitätsverteilung, HRV und Ruhepuls gegen Baseline. Unplausible Aufzeichnungen (z. B. Bahnmodus mit verlorener Distanz) werden beim Efficiency Factor ausgelassen.
+- Repo: [github.com/AlexanderWanstrath/Garmin-Dashboard](https://github.com/AlexanderWanstrath/Garmin-Dashboard) (als Remote eingetragen, noch nicht gepusht).
 
 Jede Stufe endet mit einem lauffähigen Zwischenstand und einem Commit. Nach jeder Stufe kurz prüfen, ob noch etwas Persönliches im Git-Index liegt (`git status`, `git diff --cached`).
 
