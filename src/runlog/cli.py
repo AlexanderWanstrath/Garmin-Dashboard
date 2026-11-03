@@ -51,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--reparse", action="store_true", help="re-read the stored FIT files instead of calling Garmin"
     )
     sub["check"].add_argument("--date", type=date.fromisoformat, default=None, help="YYYY-MM-DD (default: today)")
+
+    build = sub["build"]
+    build.add_argument("--output", default="output/dashboard.html", help="HTML file to write")
+    build.add_argument("--date", type=date.fromisoformat, default=None, help="build as of YYYY-MM-DD (default: today)")
+    build.add_argument("--open", action="store_true", help="open the dashboard in the browser afterwards")
     return parser
 
 
@@ -152,6 +157,37 @@ def cmd_check(cfg: dict[str, Any], args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build(cfg: dict[str, Any], args: argparse.Namespace) -> int:
+    import webbrowser
+
+    from runlog import config, db, tools
+    from runlog.dashboard.build import build
+    from runlog.plan import PlanError, load_plan
+
+    plan_path = Path((cfg.get("paths") or {}).get("plan_file") or "plan.yaml")
+    try:
+        plan = load_plan(plan_path) if plan_path.exists() else None
+    except PlanError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    try:
+        conn = db.connect_readonly(config.data_dir(cfg) / "runlog.db")
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    try:
+        html = build(tools.Context(conn, cfg, plan, args.date or date.today()))
+    finally:
+        conn.close()
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(html, encoding="utf-8")
+    print(f"Dashboard: {output.resolve()}")
+    if args.open:
+        webbrowser.open(output.resolve().as_uri())
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -166,7 +202,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         build_server(args.config).run("stdio")
         return 0
-    if args.command in ("sync", "log", "check"):
+    if args.command in ("sync", "log", "check", "build"):
         cfg = load_cfg(args.config)
         if cfg is None:
             return 1
@@ -174,6 +210,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return cmd_sync(cfg, args.reparse)
         if args.command == "log":
             return cmd_log(cfg, args)
+        if args.command == "build":
+            return cmd_build(cfg, args)
         return cmd_check(cfg, args)
     stage = COMMANDS[args.command][1]
     print(f"runlog {args.command}: not implemented yet (roadmap stage {stage})", file=sys.stderr)

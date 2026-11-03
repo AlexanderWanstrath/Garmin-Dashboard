@@ -39,6 +39,10 @@ def _round(value: Any, digits: int = 1) -> Any:
     return round(value, digits) if isinstance(value, float) else value
 
 
+def _int(value: Any) -> int | None:
+    return round(value) if isinstance(value, int | float) else None
+
+
 def _evaluate(ctx: Context, activities: list[dict[str, Any]]):
     return evaluate(
         ctx.plan,
@@ -68,11 +72,11 @@ def _run_summary(ctx: Context, a: dict[str, Any]) -> dict[str, Any]:
         "distance_km": _round((a.get("distance_m") or 0) / 1000, 2),
         "duration_min": _round((a.get("duration_s") or 0) / 60),
         "pace_min_per_km": _pace(a.get("avg_moving_speed") or a.get("avg_speed")),
-        "avg_hr_bpm": _round(a.get("avg_hr"), 0),
-        "max_hr_bpm": _round(a.get("max_hr"), 0),
+        "avg_hr_bpm": _int(a.get("avg_hr")),
+        "max_hr_bpm": _int(a.get("max_hr")),
         f"time_above_{easy_cap}_bpm_pct": round(above * 100) if above is not None else None,
-        "elevation_gain_m": _round(a.get("elevation_gain_m"), 0),
-        "cadence_spm": _round(a.get("avg_cadence_spm"), 0),
+        "elevation_gain_m": _int(a.get("elevation_gain_m")),
+        "cadence_spm": _int(a.get("avg_cadence_spm")),
         "aerobic_training_effect": _round(a.get("aerobic_te")),
         "anaerobic_training_effect": _round(a.get("anaerobic_te")),
         "garmin_rpe_1_to_10": rpe / 10 if rpe is not None else None,

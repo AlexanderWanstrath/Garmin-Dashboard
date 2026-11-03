@@ -25,6 +25,7 @@ runlog sync                          # fetch new activities and health data
 runlog log --tendon 1 --legs fresh   # morning check
 runlog log --fuel 45                 # carbohydrates (g) taken during the last run
 runlog check                         # traffic light, warnings, comparison with the plan
+runlog build --open                  # write output/dashboard.html and open it
 ```
 
 ## Claude Code (MCP)
@@ -32,8 +33,10 @@ runlog check                         # traffic light, warnings, comparison with 
 `runlog mcp` starts a stdio MCP server that only reads the database, `config.yaml` and `plan.yaml`. It never imports the Garmin client and never reads the API key. Register it locally (not in a shared `.mcp.json`, because the command contains local paths):
 
 ```bash
-claude mcp add runlog --scope local -- <project>/.venv/Scripts/runlog.exe --config <project>/config.yaml mcp
+claude mcp add runlog --scope local -- <project>/.venv/Scripts/python.exe -m runlog.mcp_server --config <project>/config.yaml
 ```
+
+Use `python -m` rather than `runlog.exe`: on Windows a running server locks the exe, and reinstalling the package then fails.
 
 If the VS Code extension does not pick up the local registration (it can see the project path with a different drive-letter case on Windows), register it with `--scope user` instead; the server is read-only and its config path is absolute.
 
