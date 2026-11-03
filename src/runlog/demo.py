@@ -1,4 +1,4 @@
-﻿"""Synthetic training data for the public demo and for tests. Nothing here comes from real data.
+"""Synthetic training data for the public demo and for tests. Nothing here comes from real data.
 
 A made-up runner trains for twelve weeks toward a marathon: quality on Tuesday, a long run on
 Thursday that grows each week (every fourth week is a recovery week), easy runs otherwise.
