@@ -51,10 +51,13 @@ def read_messages(fit: bytes) -> list[Message]:
         for frame in reader:
             if not isinstance(frame, fitdecode.FitDataMessage) or frame.name not in wanted:
                 continue
-            if frame.name.startswith("unknown_"):
-                fields = {f.def_num: f.raw_value for f in frame.fields}
-            else:
-                fields = {f.name: f.value for f in frame.fields}
+            fields: dict[Any, Any] = {}
+            for f in frame.fields:
+                key, value = (f.def_num, f.raw_value) if frame.name.startswith("unknown_") else (f.name, f.value)
+                # A field can appear twice (e.g. enhanced_avg_speed expanded from an empty avg_speed);
+                # an empty duplicate must not overwrite the real value.
+                if value is not None or key not in fields:
+                    fields[key] = value
             messages.append((frame.name, fields))
     return messages
 

@@ -144,6 +144,24 @@ def sync_health(
     result.health_range = (start, today)
 
 
+def reparse_fit_files(conn: sqlite3.Connection, log: Callable[[str], None] = print) -> int:
+    """Rebuild samples, laps and VO2max from the stored FIT files, without calling the API."""
+    rows = conn.execute("SELECT id, fit_path FROM activities WHERE fit_path IS NOT NULL").fetchall()
+    count = 0
+    for activity_id, fit_path in rows:
+        path = Path(fit_path)
+        if not path.exists():
+            log(f"  activity {activity_id}: {path} missing, skipped")
+            continue
+        fit = parse_fit(path.read_bytes())
+        conn.execute("UPDATE activities SET vo2max = ? WHERE id = ?", (fit.vo2max, activity_id))
+        db.replace_rows(conn, "activity_samples", activity_id, [{"activity_id": activity_id, **s} for s in fit.samples])
+        db.replace_rows(conn, "laps", activity_id, [{"activity_id": activity_id, **lap} for lap in fit.laps])
+        conn.commit()
+        count += 1
+    return count
+
+
 def store_raw(conn: sqlite3.Connection, endpoint: str, key: str, data: Any) -> None:
     if data is None:
         return

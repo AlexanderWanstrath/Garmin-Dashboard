@@ -167,7 +167,8 @@ running-analytics-dashboard/
 
 ## 7. Stufenplan
 
-**Stand (2026-11-03):** Stufen 0, 1a, 1b und 1c sind abgeschlossen.
+**Stand (2026-11-03):** Stufen 0, 1a, 1b, 1c und 1d sind abgeschlossen.
+- 1d: `runlog log` erfasst den Morgen-Check (Patellasehne 0-10, Anlaufschmerz, Beine, Hüfte) und Fueling pro Lauf. RPE kommt aus Garmins Selbsteinschätzung auf der Uhr. `runlog check` zeigt die Ampel (grün/gelb/rot je Signal, das schlechteste entscheidet, mit Empfehlung), Warnungen (Wochenkilometer gegen den 3-Wochen-Schnitt) und den Abgleich mit dem Trainingsplan aus `plan.yaml` (lokal, Vorlage `plan.example.yaml`): Umfang, Pace-Obergrenze und Zeit über der Pulsgrenze bei lockeren Läufen, Wiederholungen von Qualitätseinheiten anhand der Workout-Laps der Uhr, Fueling in g/h, Wochenumfang. „Locker“ ist über eine feste Pulsgrenze aus der Config definiert, nicht über Garmins Zonen, weil Garmin die Zonen zwischendurch verschiebt. `runlog sync --reparse` wertet die gespeicherten FIT-Dateien neu aus, ohne die API abzufragen.
 - `runlog sync` lädt Aktivitäten (inkl. FIT-Sekundenwerte, Laps, VO2max) und Gesundheitsdaten in `data/runlog.db`. Zweiter Aufruf lädt nur Neues, Gesundheitsdaten der letzten 3 Tage werden neu geladen, weil Garmin sie nachträglich ergänzt.
 - Kennzahlen in `src/runlog/metrics/` als reine Python-Funktionen (ohne pandas, die Datenmengen sind klein): Wochenvolumen mit Steigerungsrate, Long Runs, aerobe Entkopplung, Efficiency Factor lockerer Läufe, Intensitätsverteilung, HRV und Ruhepuls gegen Baseline. Unplausible Aufzeichnungen (z. B. Bahnmodus mit verlorener Distanz) werden beim Efficiency Factor ausgelassen.
 - Repo: [github.com/AlexanderWanstrath/Garmin-Dashboard](https://github.com/AlexanderWanstrath/Garmin-Dashboard) (als Remote eingetragen, noch nicht gepusht).

@@ -1,0 +1,17 @@
+# Training plan. Copy to plan.yaml (ignored by git) and replace with your own plan.
+#
+# Session types: E easy, L long run, Q quality (intervals, threshold), R race or test, T pacing.
+# km:   planned distance including warm-up and cool-down, a number or [min, max]
+# pace: [fastest, slowest] per km for the main part. For easy and long runs the fastest
+#       value is a cap: running faster is flagged.
+# reps: work intervals of a quality session; compared with the laps the watch marks as "active".
+
+weeks:
+  - {start: 2030-01-07, km: [40, 45]}
+  - {start: 2030-01-14, km: 46}
+
+sessions:
+  - {date: 2030-01-08, type: Q, name: 5 x 1000 m, km: 10, reps: {count: 5, pace: ["4:20", "4:25"]}}
+  - {date: 2030-01-09, type: E, name: Easy run, km: 8, pace: ["6:00", "6:30"], hr_max: 145}
+  - {date: 2030-01-11, type: L, name: Long run, km: 20, pace: ["5:50", "6:20"], hr_max: 150, fuel_g_per_h: 45}
+  - {date: 2030-01-13, type: E, name: Easy run, km: 8, pace: ["6:00", "6:30"], hr_max: 145}

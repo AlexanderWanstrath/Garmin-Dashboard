@@ -3,6 +3,7 @@
 
 paths:
   data_dir: data                 # database (runlog.db) and FIT files; ignored by git
+  plan_file: plan.yaml           # training plan, see plan.example.yaml; ignored by git
 
 sync:
   start_date: null               # e.g. 2026-09-01; null = full activity history
@@ -19,21 +20,31 @@ events:
     date: 2030-04-01
 
 baselines:
-  hrv_ms: {low: 50, high: 80}
-  resting_hr_bpm: 55
+  hrv_ms: {low: 50, high: 80}    # fallback if Garmin has no HRV baseline yet
+  resting_hr_bpm: null           # null = median of the previous 28 days
 
-heart_rate_zones:
-  source: garmin        # use the zones from the Garmin profile; override below if needed
-  override: null
+# Heart rate caps that define "easy", independent of Garmin's zones.
+intensity:
+  easy_hr_max: 140               # easy runs stay below this
+  long_hr_max: 145               # long runs stay below this
+  easy_share_min: 0.8            # share of moving time below the cap for a run to count as easy
+
+# Morning check: traffic light per signal. The worst signal decides the day.
+morning_check:
+  tendon: {yellow: 2, red: 4}             # 0-10; startup pain is always red
+  hrv_ms: {low: 85, red_days: 2}          # one night below = yellow, red_days in a row = red
+  resting_hr_bpm: {yellow: 43, red: 46, red_days: 2}   # red_days in a row at or above red = red
+  advice:
+    green: Train as planned.
+    yellow: Long run 20-30 % shorter, quality session becomes an easy run.
+    red: Easy or rest day, rethink the plan.
 
 warnings:
-  weekly_volume_increase_pct: 10
-  hrv_below_baseline_days: 3       # consecutive days below hrv_ms.low
-  resting_hr_above_baseline_bpm: 5
-  tendon_pain_max: 2               # scale 0 to 10
-  tempo_faster_than_plan_pct: 3
+  weekly_volume_increase_pct: 10   # against the mean of the three previous weeks
+  easy_hr_over_cap_share: 0.1      # easy/long run: more than this share of moving time above the cap
+  rep_pace_tolerance_s: 2          # rep faster than the plan's fastest pace by more than this
 
 metrics:
   long_run_min_km: 14              # runs from this distance count as long runs
   decoupling_warmup_min: 10        # minutes excluded at the start
-  easy_zones: [1, 2]
+  easy_zones: [1, 2]               # only for Garmin's own zone statistics

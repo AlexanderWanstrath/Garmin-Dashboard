@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from runlog.metrics import Row, is_run
+from runlog.metrics.intensity import share_above
 
 EASY_SHARE = 0.8  # a run counts as easy if at least this share of zone time is in the easy zones
 # Outside this range the recording is broken (e.g. track mode losing distance), not the runner.
@@ -22,6 +23,12 @@ def easy_share(activity: Row, easy_zones: Iterable[int]) -> float | None:
 def is_easy_run(activity: Row, easy_zones: Iterable[int]) -> bool:
     share = easy_share(activity, easy_zones)
     return is_run(activity) and share is not None and share >= EASY_SHARE
+
+
+def is_easy_by_hr(activity: Row, samples: list[Row], hr_cap: float, min_share: float = EASY_SHARE) -> bool:
+    """Easy if at least `min_share` of the moving time stays at or below the heart rate cap."""
+    above = share_above(samples, hr_cap)
+    return is_run(activity) and above is not None and 1 - above >= min_share
 
 
 def efficiency_factor(activity: Row) -> float | None:

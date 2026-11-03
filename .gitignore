@@ -10,6 +10,7 @@ notebooks/
 *.fit
 .env
 config.yaml
+plan.yaml
 
 # Python
 .venv/
