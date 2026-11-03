@@ -23,6 +23,17 @@ def connect(path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+def connect_readonly(path: str | Path) -> sqlite3.Connection:
+    """Open the database read-only twice over: mode=ro in the URI and PRAGMA query_only."""
+    path = Path(path).resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found: run 'runlog sync' first")
+    conn = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only = ON")
+    return conn
+
+
 def migrations() -> list[tuple[int, str]]:
     """Migration files as (number, sql), sorted by number. Names look like 001_initial.sql."""
     files = resources.files("runlog") / "migrations"

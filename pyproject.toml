@@ -20,6 +20,7 @@ runlog = "runlog.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+mcp = ["mcp>=2.3,<3"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/runlog"]

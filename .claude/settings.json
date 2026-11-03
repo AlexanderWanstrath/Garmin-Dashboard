@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(~/.config/garmin/**)",
+      "Edit(~/.config/garmin/**)"
+    ]
+  }
+}

@@ -158,6 +158,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command is None:
         parser.print_help()
         return 0
+    if args.command == "mcp":
+        try:
+            from runlog.mcp_server import build_server
+        except ImportError:
+            print("Error: the MCP server needs the extra: pip install -e '.[mcp]'", file=sys.stderr)
+            return 1
+        build_server(args.config).run("stdio")
+        return 0
     if args.command in ("sync", "log", "check"):
         cfg = load_cfg(args.config)
         if cfg is None:

@@ -13,7 +13,7 @@ def test_no_command_prints_help(capsys):
         assert name in out
 
 
-@pytest.mark.parametrize("name", [c for c in COMMANDS if c not in ("sync", "log", "check")])
+@pytest.mark.parametrize("name", [c for c in COMMANDS if c not in ("sync", "log", "check", "mcp")])
 def test_unimplemented_command_fails_with_stage(name, capsys):
     assert main([name]) == 1
     assert f"stage {COMMANDS[name][1]}" in capsys.readouterr().err
