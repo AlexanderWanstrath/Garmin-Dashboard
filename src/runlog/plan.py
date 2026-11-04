@@ -45,16 +45,22 @@ class PlanWeek:
 class Plan:
     weeks: list[PlanWeek]
     sessions: list[Session]
+    previous_weeks: list[PlanWeek] = field(default_factory=list)  # an earlier plan, only drawn for comparison
 
 
 @dataclass
 class SessionResult:
     session: Session
     status: str  # "done", "moved", "missed", "upcoming"
-    activity_id: int | None = None
+    activity_id: int | None = None  # the longest run of the day
     actual_date: date | None = None
-    actual_km: float | None = None
+    actual_km: float | None = None  # all runs of that day, e.g. warm-up, test and cool-down recorded separately
     findings: list[str] = field(default_factory=list)  # deviations from the plan, empty = as planned
+    activity_ids: list[int] = field(default_factory=list)
+    pace_s: float | None = None  # moving pace of the main run
+    avg_hr: float | None = None
+    rep_paces_s: list[float] = field(default_factory=list)  # work intervals of a quality session
+    main_pace_s: float | None = None  # active laps of a race or pacing run
 
 
 @dataclass
@@ -113,9 +119,16 @@ def load_plan(path: str | Path) -> Plan:
                 )
             )
         weeks = [PlanWeek(_date(w["start"]), _range(w["km"]), w.get("label")) for w in raw.get("weeks") or []]
+        previous = [
+            PlanWeek(_date(w["start"]), _range(w["km"]), w.get("label")) for w in raw.get("previous_weeks") or []
+        ]
     except (KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
         raise PlanError(f"{path} is malformed: {exc}") from exc
-    return Plan(weeks=sorted(weeks, key=lambda w: w.start), sessions=sorted(sessions, key=lambda s: s.date))
+    return Plan(
+        weeks=sorted(weeks, key=lambda w: w.start),
+        sessions=sorted(sessions, key=lambda s: s.date),
+        previous_weeks=sorted(previous, key=lambda w: w.start),
+    )
 
 
 def match_sessions(plan: Plan, activities: list[Row], today: date) -> dict[int, Row]:
@@ -163,6 +176,7 @@ def evaluate(
     decides how data is loaded (database in production, lists in tests).
     """
     matches = match_sessions(plan, activities, today)
+    matched_ids = {a["id"] for a in matches.values()}
     results = []
     for i, session in enumerate(plan.sessions):
         activity = matches.get(i)
@@ -172,20 +186,32 @@ def evaluate(
             results.append(SessionResult(session, status))
             continue
         actual_date = activity_date(activity)
+        # Other runs of the same day that no session claimed belong to this one (warm-up, cool-down).
+        day_runs = [activity] + [
+            a for a in activities if is_run(a) and a["id"] not in matched_ids and activity_date(a) == actual_date
+        ]
+        speed = activity.get("avg_moving_speed") or activity.get("avg_speed")
         result = SessionResult(
             session,
             "done" if actual_date == session.date else "moved",
             activity_id=activity["id"],
             actual_date=actual_date,
-            actual_km=round((activity.get("distance_m") or 0) / 1000, 1),
+            actual_km=round(sum((a.get("distance_m") or 0) for a in day_runs) / 1000, 1),
+            activity_ids=[a["id"] for a in day_runs],
+            pace_s=1000 / speed if speed else None,
+            avg_hr=activity.get("avg_hr"),
         )
+        laps = laps_for(activity["id"]) if laps_for else []
         result.findings += check_distance(session, result.actual_km)
         if session.type in ("E", "L"):
             result.findings += check_easy(session, activity, samples_for, over_cap_share)
         if session.type == "Q" and laps_for:
-            result.findings += check_reps(session, laps_for(activity["id"]), rep_tolerance_s)
-        if session.type in ("R", "T") and session.pace_s and laps_for:
-            result.findings += check_main_pace(session, laps_for(activity["id"]))
+            result.rep_paces_s = rep_paces(laps)
+            result.findings += check_reps(session, laps, rep_tolerance_s)
+        if session.type in ("R", "T") and laps_for:
+            result.main_pace_s = main_pace(laps)
+            if session.pace_s:
+                result.findings += check_main_pace(session, laps)
         if session.fuel_g_per_h and fuel_for:
             result.findings += check_fuel(session, activity, fuel_for(activity["id"]))
         results.append(result)
@@ -244,12 +270,19 @@ def check_reps(session: Session, laps: list[Row], tolerance_s: float) -> list[st
     return findings
 
 
+def main_pace(laps: list[Row]) -> float | None:
+    """Mean pace in s/km of the laps the watch workout marks as active."""
+    active = [lap for lap in laps if lap.get("intensity") == "active" and lap.get("distance_m") and lap.get("timer_s")]
+    if not active:
+        return None
+    return sum(lap["timer_s"] for lap in active) / sum(lap["distance_m"] for lap in active) * 1000
+
+
 def check_main_pace(session: Session, laps: list[Row]) -> list[str]:
     """Races and pacing runs: mean pace of the active laps against the planned range."""
-    active = [lap for lap in laps if lap.get("intensity") == "active" and lap.get("distance_m") and lap.get("timer_s")]
-    if not active or not session.pace_s:
+    pace = main_pace(laps)
+    if pace is None or not session.pace_s:
         return []
-    pace = sum(lap["timer_s"] for lap in active) / sum(lap["distance_m"] for lap in active) * 1000
     low, high = session.pace_s
     if pace < low - 2:
         return [f"main part {format_pace(pace)}/km, faster than planned {format_pace(low)}/km"]
@@ -292,6 +325,47 @@ def weekly_status(plan: Plan, activities: list[Row], today: date) -> list[WeekRe
             status = "within"
         results.append(WeekResult(week, actual, status))
     return results
+
+
+def _pace_range(value: tuple[float, float]) -> str:
+    low, high = value
+    return f"{format_pace(low)}/km" if low == high else f"{format_pace(low)}–{format_pace(high)}/km"
+
+
+def describe_target(session: Session) -> str:
+    """The session's target in one line, e.g. '6:50–7:15/km · HR ≤ 140' or '4 × 3:58–4:02/km'."""
+    parts = []
+    if session.reps or session.rep_pace_s:
+        reps = f"{session.reps} × " if session.reps else "reps "
+        parts.append(reps + (_pace_range(session.rep_pace_s) if session.rep_pace_s else "as planned"))
+    elif session.pace_s:
+        parts.append(_pace_range(session.pace_s))
+    if session.hr_max:
+        parts.append(f"HR ≤ {session.hr_max:g}")
+    if session.fuel_g_per_h:
+        parts.append(f"{session.fuel_g_per_h:g} g/h")
+    return " · ".join(parts)
+
+
+def describe_actual(result: SessionResult) -> str:
+    """How the session was run, in the same terms as describe_target."""
+    if result.activity_id is None:
+        return ""
+    parts = []
+    if result.rep_paces_s:
+        parts.append(", ".join(format_pace(p) for p in result.rep_paces_s))
+    elif result.main_pace_s:
+        parts.append(f"main part {format_pace(result.main_pace_s)}/km")
+    elif result.pace_s:
+        parts.append(f"{format_pace(result.pace_s)}/km")
+    if result.avg_hr:
+        parts.append(f"Ø HR {result.avg_hr:.0f}")
+    return " · ".join(parts)
+
+
+def planned_km(session: Session) -> float:
+    """Middle of the planned range, 0 without a distance."""
+    return sum(session.km) / 2 if session.km else 0.0
 
 
 def _km(value: tuple[float, float]) -> str:

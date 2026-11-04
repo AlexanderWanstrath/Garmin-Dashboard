@@ -97,6 +97,17 @@ def build_server(config_path: str | Path = DEFAULT_CONFIG_PATH) -> MCPServer:
         return settings.call(tools.get_plan_status, days_back=days_back, days_ahead=days_ahead)
 
     @server.tool(annotations=READ_ONLY)
+    def get_plan_progress() -> dict[str, Any]:
+        """Km planned up to today against km run since the plan started, in total and per plan week,
+        split into heart rate zones."""
+        return settings.call(tools.get_plan_progress)
+
+    @server.tool(annotations=READ_ONLY)
+    def get_zone_volume(weeks: int = 8) -> list[dict[str, Any]]:
+        """Running km and minutes per heart rate zone (zones from the config) for each week."""
+        return settings.call(tools.get_zone_volume, weeks=weeks)
+
+    @server.tool(annotations=READ_ONLY)
     def get_countdown() -> list[dict[str, Any]]:
         """Days until the upcoming races and tests."""
         return settings.call(tools.get_countdown)

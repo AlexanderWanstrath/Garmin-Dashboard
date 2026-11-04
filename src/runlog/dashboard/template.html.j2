@@ -82,125 +82,84 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
 header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 h1 { font-size: 20px; font-weight: 600; margin: 0; }
 h2 { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+h3 { font-size: 13px; font-weight: 600; margin: 16px 0 4px; color: var(--text-secondary); }
 .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 8px; }
+.note { color: var(--muted); font-size: 12px; margin: -4px 0 8px; }
 .muted { color: var(--muted); }
 button.theme {
   font: inherit; color: var(--text-secondary); background: var(--surface-1);
   border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer;
 }
+nav.tabs { display: flex; gap: 4px; margin: 16px 0; border-bottom: 1px solid var(--axis); overflow-x: auto; }
+nav.tabs a { padding: 8px 14px; color: var(--text-secondary); text-decoration: none; border-bottom: 2px solid transparent;
+  margin-bottom: -1px; white-space: nowrap; font-weight: 500; }
+nav.tabs a[aria-current="page"] { color: var(--text-primary); border-bottom-color: var(--series-1); }
+.page[hidden] { display: none; }
 .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
-.top { display: grid; grid-template-columns: minmax(220px, 1.2fr) 3fr; gap: 16px; margin: 20px 0 16px; }
-.hero .value { font-size: 48px; font-weight: 600; line-height: 1.1; margin: 4px 0; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
-.tile .label { color: var(--text-secondary); font-size: 13px; }
-.tile .value { font-size: 22px; font-weight: 600; margin: 2px 0; display: flex; align-items: center; gap: 8px; }
+.strip { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.strip .card { padding: 10px 14px; flex: 1 1 160px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile .label { color: var(--text-secondary); font-size: 12px; }
+.tile .value { font-size: 18px; font-weight: 600; margin: 2px 0; display: flex; align-items: center; gap: 8px; }
 .tile .detail { color: var(--muted); font-size: 12px; }
 .status { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
   border-radius: 50%; font-size: 12px; font-weight: 700; color: var(--on-status); flex: none; }
+.status.big { width: 28px; height: 28px; font-size: 15px; }
 .status.green { background: var(--good); }
 .status.yellow { background: var(--warning); color: var(--on-warning); }
 .status.red { background: var(--critical); }
-.row2 { display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px; margin-bottom: 16px; }
+.row2 { display: grid; grid-template-columns: minmax(280px, 1fr) 2fr; gap: 16px; margin-bottom: 16px; }
+.level { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; margin: 6px 0 2px; }
 .signals { list-style: none; padding: 0; margin: 8px 0 0; }
 .signals li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid var(--grid); }
 .signals li:first-child { border-top: 0; }
-.signals .name { width: 90px; color: var(--text-secondary); }
-.warnings { margin: 12px 0 0; padding-left: 18px; }
+.signals .name { width: 110px; flex: none; color: var(--text-secondary); }
+.signals .value { font-weight: 600; min-width: 28px; }
+.advice { margin: 4px 0 0; padding-left: 18px; }
+.advice li { margin: 4px 0; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th { text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--axis); padding: 6px 8px; }
 td { border-bottom: 1px solid var(--grid); padding: 6px 8px; vertical-align: top; font-variant-numeric: tabular-nums; }
 tr.today td { background: var(--band); }
+tr.week th { padding-top: 14px; color: var(--text-primary); border-bottom: 1px solid var(--axis); }
+tr.week th .muted { font-weight: 400; }
+.small { color: var(--muted); font-size: 12px; }
 .finding { color: var(--text-secondary); font-size: 12px; }
 .finding::before { content: "! "; font-weight: 700; color: var(--critical); }
 .scroll { overflow-x: auto; }
-.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.plot { width: 100%; height: 280px; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+.charts .wide { grid-column: 1 / -1; }
+.plot { width: 100%; }
 .empty { height: 120px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
 details { margin-top: 8px; }
 summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; }
 details table { margin-top: 8px; }
 footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
 @media (max-width: 900px) {
-  .top, .row2, .charts { grid-template-columns: minmax(0, 1fr); }
+  .row2, .charts { grid-template-columns: minmax(0, 1fr); }
 }
 </style>
 </head>
 <body>
-<main>
-<header>
-  <h1>Training Dashboard</h1>
-  <div>
-    <span class="muted">Data until {{ d.today.strftime("%a %d.%m.%Y") }}</span>
-    <button class="theme" id="theme" type="button" aria-label="Switch color theme">Theme: auto</button>
-  </div>
-</header>
-
-<section class="top">
-  <div class="card hero">
-    <div class="sub">{{ d.hero.label }}</div>
-    <div class="value">{{ d.hero.value }}</div>
-    <div class="muted">{{ d.hero.detail }}</div>
-  </div>
-  <div class="tiles">
-  {% for t in d.tiles %}
+{% set ICON = {"green": "✓", "yellow": "!", "red": "✕"} %}
+{% macro tile(t) %}
     <div class="card tile">
       <div class="label">{{ t.label }}</div>
       <div class="value">
-        {% if t.status %}<span class="status {{ t.status }}" aria-hidden="true">{{ {"green": "✓", "yellow": "!", "red": "✕"}[t.status] }}</span>{% endif %}
+        {% if t.status %}<span class="status {{ t.status }}" aria-hidden="true">{{ ICON[t.status] }}</span>{% endif %}
         {{ t.value }}
       </div>
       <div class="detail">{{ t.detail }}</div>
     </div>
-  {% endfor %}
-  </div>
-</section>
-
-<section class="row2">
-  <div class="card">
-    <h2>Morning check</h2>
-    <ul class="signals">
-    {% for s in d.morning.signals %}
-      <li>
-        <span class="name">{{ {"tendon": "Patellar tendon", "hrv": "HRV", "resting_hr": "Resting HR", "legs": "Legs"}.get(s.signal, s.signal) }}</span>
-        {% if s.level %}<span class="status {{ s.level }}" aria-hidden="true">{{ {"green": "✓", "yellow": "!", "red": "✕"}[s.level] }}</span><span>{{ s.level|capitalize }}</span>{% else %}<span class="muted">–</span>{% endif %}
-        <span class="muted">{{ s.reason }}</span>
-      </li>
-    {% endfor %}
-    </ul>
-    <h2 style="margin-top:16px">Warnings</h2>
-    {% if d.warnings %}
-    <ul class="warnings">{% for w in d.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
-    {% else %}<p class="muted">None.</p>{% endif %}
-  </div>
-  <div class="card">
-    <h2>Plan</h2>
-    <p class="sub">Last {{ 14 }} days and the coming week</p>
-    {% if d.plan_rows %}
-    <div class="scroll"><table>
-      <thead><tr><th>Date</th><th>Type</th><th>Session</th><th>Planned</th><th>Done</th><th>Status</th></tr></thead>
-      <tbody>
-      {% for r in d.plan_rows %}
-        <tr{% if r.today %} class="today"{% endif %}>
-          <td>{{ r.weekday }} {{ r.date }}</td><td>{{ r.type }}</td>
-          <td>{{ r.session }}{% for f in r.findings %}<div class="finding">{{ f }}</div>{% endfor %}</td>
-          <td>{{ r.planned }}</td><td>{{ r.actual }}</td><td>{{ r.status }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table></div>
-    {% for w in d.plan_weeks %}
-      <p class="sub" style="margin-top:8px">Week of {{ w.week_start }}{% if w.label %} ({{ w.label }}){% endif %}: {{ "%g"|format(w.actual_km) }} km of {{ "%g"|format(w.planned_km[0]) }}{% if w.planned_km[1] != w.planned_km[0] %}–{{ "%g"|format(w.planned_km[1]) }}{% endif %} km, {{ w.status }}</p>
-    {% endfor %}
-    {% else %}<p class="muted">No plan.yaml, or no sessions around today.</p>{% endif %}
-  </div>
-</section>
-
+{% endmacro %}
+{% macro chart_grid(list) %}
 <section class="charts">
-{% for c in charts %}
-  <div class="card">
+{% for c in list %}
+  <div class="card{% if c.wide %} wide{% endif %}">
     <h2>{{ c.title }}</h2>
     <p class="sub">{{ c.subtitle }}</p>
-    {% if c.empty %}<div class="empty">{{ c.empty }}</div>{% else %}<div class="plot" id="chart-{{ c.id }}" role="img" aria-label="{{ c.title }}: {{ c.subtitle }}"></div>{% endif %}
+    {% if c.note %}<p class="note">{{ c.note }}</p>{% endif %}
+    {% if c.empty %}<div class="empty">{{ c.empty }}</div>{% else %}<div class="plot" id="chart-{{ c.id }}" style="height:{{ c.height }}px" role="img" aria-label="{{ c.title }}: {{ c.subtitle }}"></div>{% endif %}
     <details>
       <summary>Table</summary>
       <div class="scroll"><table>
@@ -211,8 +170,81 @@ footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
   </div>
 {% endfor %}
 </section>
+{% endmacro %}
+{% macro session_row(r, show_type=True) %}
+        <tr{% if r.today %} class="today"{% endif %}>
+          <td>{{ r.weekday }} {{ r.date }}</td>
+          <td>{{ r.session }}<div class="small">{{ r.type }}</div>{% for f in r.findings %}<div class="finding">{{ f }}</div>{% endfor %}</td>
+          <td>{{ r.target or "–" }}</td>
+          <td>{{ r.planned }}</td>
+          <td>{{ r.actual_km }}{% if r.actual %}<div class="small">{{ r.actual }}</div>{% endif %}</td>
+          <td>{{ r.status }}</td>
+        </tr>
+{% endmacro %}
+<main>
+<header>
+  <h1>Training Dashboard</h1>
+  <div>
+    <span class="muted">Data until {{ d.today.strftime("%a %d.%m.%Y") }}</span>
+    <button class="theme" id="theme" type="button" aria-label="Switch color theme">Theme: auto</button>
+  </div>
+</header>
 
-<section class="card" style="margin-top:16px">
+<nav class="tabs" aria-label="Pages">
+  <a href="#overview" data-page="overview">Overview</a>
+  <a href="#plan" data-page="plan">Marathon plan</a>
+  <a href="#health" data-page="health">Health</a>
+</nav>
+
+<!-- Overview ---------------------------------------------------------------->
+<div class="page" id="page-overview">
+<section class="strip">
+  {{ tile(d.week) }}
+  {% for t in d.countdown %}{{ tile(t) }}{% endfor %}
+</section>
+
+<section class="row2">
+  <div class="card">
+    <h2>Morning check</h2>
+    <div class="level">
+      {% if d.morning.level %}<span class="status big {{ d.morning.level }}" aria-hidden="true">{{ ICON[d.morning.level] }}</span>{{ d.morning.level|capitalize }}{% else %}<span class="muted">No data</span>{% endif %}
+    </div>
+    <ul class="signals">
+    {% for s in d.morning.signals %}
+      <li>
+        <span class="name">{{ {"tendon": "Patellar tendon", "hrv": "HRV", "resting_hr": "Resting HR", "legs": "Legs"}.get(s.signal, s.signal) }}</span>
+        {% if s.level %}<span class="status {{ s.level }}" aria-hidden="true">{{ ICON[s.level] }}</span>{% else %}<span class="muted">–</span>{% endif %}
+        <span class="muted">{{ s.reason }}</span>
+      </li>
+    {% endfor %}
+    {% for t in d.wellness %}
+      <li>
+        <span class="name">{{ t.label }}</span>
+        <span class="value">{{ t.value }}</span>
+        <span class="muted">{{ t.detail }}</span>
+      </li>
+    {% endfor %}
+    </ul>
+    <h3>Warnings and recommendations</h3>
+    {% if d.advice %}
+    <ul class="advice">{% for w in d.advice %}<li>{{ w }}</li>{% endfor %}</ul>
+    {% else %}<p class="muted">None.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Plan</h2>
+    <p class="sub">Last {{ 14 }} days and the coming week: target against how you ran it</p>
+    {% if d.plan_rows %}
+    <div class="scroll"><table>
+      <thead><tr><th>Date</th><th>Session</th><th>Target</th><th>Planned</th><th>Done</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for r in d.plan_rows %}{{ session_row(r) }}{% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p class="muted">No plan.yaml, or no sessions around today.</p>{% endif %}
+  </div>
+</section>
+
+<section class="card" style="margin-bottom:16px">
   <h2>Runs, last 14 days</h2>
   <div class="scroll"><table>
     <thead><tr><th>Date</th><th>Name</th><th>km</th><th>Pace</th><th>Avg HR</th><th>Above easy cap</th><th>Aerobic TE</th><th>RPE</th><th>VO2max</th></tr></thead>
@@ -230,6 +262,39 @@ footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
     </tbody>
   </table></div>
 </section>
+
+{{ chart_grid(pages.overview) }}
+</div>
+
+<!-- Marathon plan ----------------------------------------------------------->
+<div class="page" id="page-plan" hidden>
+{% if d.progress %}
+{{ chart_grid(pages.plan) }}
+<section class="card">
+  <h2>All sessions</h2>
+  <p class="sub">{{ "%g"|format(d.progress.planned_km_total) }} km planned in total; target against how you ran it</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Date</th><th>Session</th><th>Target</th><th>Planned</th><th>Done</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for w in d.plan_weeks %}
+      <tr class="week"><th colspan="6">{{ w.title }} <span class="muted">· {{ w.planned }} planned{% if not w.future %} · {{ "%g"|format(w.done_km) }} km run{% endif %}</span></th></tr>
+      {% for r in w.sessions %}{{ session_row(r) }}{% endfor %}
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% else %}
+<p class="muted">No plan.yaml: copy plan.example.yaml to plan.yaml and enter your plan.</p>
+{% endif %}
+</div>
+
+<!-- Health ------------------------------------------------------------------>
+<div class="page" id="page-health" hidden>
+<section class="tiles">
+  {% for t in d.health_tiles %}{{ tile(t) }}{% endfor %}
+</section>
+{{ chart_grid(pages.health) }}
+</div>
 
 <footer>Generated by runlog from Garmin data. Charts need an internet connection to load Plotly.</footer>
 </main>
@@ -282,11 +347,19 @@ function baseLayout() {
   };
 }
 
+const PAGES = ["overview", "plan", "health"];
+function currentPage() {
+  const p = location.hash.slice(1);
+  return PAGES.includes(p) ? p : "overview";
+}
+
+// Plotly measures its container, so only the visible page is drawn; switching pages redraws.
 function render() {
   if (!window.Plotly) return;
+  const page = currentPage();
   for (const c of CHARTS) {
     const el = document.getElementById("chart-" + c.id);
-    if (!el) continue;
+    if (!el || c.page !== page) continue;
     Plotly.react(el, resolve(c.data), resolve(merge(baseLayout(), c.layout)),
       { displayModeBar: false, responsive: true });
   }
@@ -301,9 +374,18 @@ button.addEventListener("click", () => {
   try { next ? localStorage.setItem("runlog-theme", next) : localStorage.removeItem("runlog-theme"); } catch (e) {}
   label(); render();
 });
+function showPage() {
+  const page = currentPage();
+  for (const p of PAGES) document.getElementById("page-" + p).hidden = p !== page;
+  for (const a of document.querySelectorAll("nav.tabs a")) {
+    if (a.dataset.page === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+  render();
+}
+window.addEventListener("hashchange", showPage);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
 label();
-render();
+showPage();
 </script>
 </body>
 </html>

@@ -27,6 +27,33 @@ def share_above(samples: list[Row], hr_cap: float) -> float | None:
     return above / (below + above) if below + above else None
 
 
+def zone_split(samples: list[Row], bounds: list[float]) -> tuple[list[float], list[float]]:
+    """Metres and moving seconds per heart rate zone.
+
+    bounds are the upper limits of all zones but the last, e.g. [140, 160] gives three zones
+    (≤ 140, 141-160, > 160). Each sample's distance step counts in the zone of its heart rate
+    (from the distance field, else speed × 1 s); samples without heart rate are left out.
+    """
+    metres = [0.0] * (len(bounds) + 1)
+    seconds = [0.0] * (len(bounds) + 1)
+    previous = None
+    for s in samples:
+        dist = s.get("distance_m")
+        if dist is not None:
+            step = dist - previous if previous is not None and dist >= previous else 0.0
+            previous = dist
+        else:
+            step = s.get("speed") or 0.0
+        hr = s.get("hr")
+        if not hr:
+            continue
+        zone = next((i for i, b in enumerate(bounds) if hr <= b), len(bounds))
+        metres[zone] += step
+        if (s.get("speed") or 0) >= MIN_SPEED:
+            seconds[zone] += 1
+    return metres, seconds
+
+
 def weekly_intensity_by_hr(
     activities: list[Row], samples_for: Callable[[int], list[Row]], easy_hr_max: float
 ) -> list[IntensityWeek]:

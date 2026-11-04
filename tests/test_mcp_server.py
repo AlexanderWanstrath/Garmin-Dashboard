@@ -19,6 +19,8 @@ TOOL_NAMES = {
     "get_recovery_status",
     "get_warnings",
     "get_plan_status",
+    "get_plan_progress",
+    "get_zone_volume",
     "get_countdown",
     "get_manual_entries",
 }
@@ -45,6 +47,10 @@ def test_tools_return_data(project):
     assert s.call(tools.get_manual_entries)[0]["patellar_tendon_0_to_10"] == 1
     assert s.call(tools.get_weekly_volume)[-1]["distance_km"] >= 0
     assert s.call(tools.get_intensity_distribution)[0]["easy_below_140_bpm_pct"] == 100.0
+    assert s.call(tools.get_zone_volume)[-1]["easy_km"] == 8.0
+    progress = s.call(tools.get_plan_progress)
+    assert progress["done_by_zone_km"]["easy"] == 8.0
+    assert progress["zones"] == ["Easy ≤ 140", "Moderate 141–160", "Hard > 160"]
 
 
 def test_server_registers_read_only_tools(project):
@@ -102,7 +108,8 @@ def test_tools_never_touch_the_api_key(project):
         s = Settings(r"{project / "config.yaml"}")
         for fn in (tools.get_recent_runs, tools.get_weekly_volume, tools.get_intensity_distribution,
                    tools.get_recovery_status, tools.get_warnings, tools.get_plan_status,
-                   tools.get_countdown, tools.get_manual_entries):
+                   tools.get_countdown, tools.get_manual_entries, tools.get_plan_progress,
+                   tools.get_zone_volume):
             s.call(fn)
         s.call(tools.get_run_details, activity_id=1)
         print("ok")

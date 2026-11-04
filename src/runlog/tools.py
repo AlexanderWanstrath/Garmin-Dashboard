@@ -10,13 +10,22 @@ from datetime import date, timedelta
 from typing import Any
 
 from runlog import data
-from runlog.metrics import activity_date, is_run
+from runlog.metrics import activity_date, is_run, week_start
 from runlog.metrics.decoupling import decoupling_pct
 from runlog.metrics.efficiency import efficiency_factor
-from runlog.metrics.intensity import share_above, weekly_intensity, weekly_intensity_by_hr
+from runlog.metrics.intensity import share_above, weekly_intensity, weekly_intensity_by_hr, zone_split
 from runlog.metrics.recovery import recovery
 from runlog.metrics.volume import weekly_volume
-from runlog.plan import TYPES, Plan, evaluate, format_pace, weekly_status
+from runlog.plan import (
+    TYPES,
+    Plan,
+    describe_actual,
+    describe_target,
+    evaluate,
+    format_pace,
+    planned_km,
+    weekly_status,
+)
 from runlog.warnings import morning_check, volume_warnings
 
 
@@ -238,9 +247,12 @@ def get_plan_status(ctx: Context, days_back: int = 7, days_ahead: int = 7) -> di
             "type": TYPES[r.session.type],
             "session": r.session.name,
             "planned_km": list(r.session.km) if r.session.km else None,
+            "target": describe_target(r.session),
             "status": r.status,
             "actual_date": r.actual_date.isoformat() if r.actual_date else None,
             "actual_km": r.actual_km,
+            "actual": describe_actual(r),
+            "activity_ids": r.activity_ids,
             "findings": r.findings,
         }
         for r in _evaluate(ctx, activities)
@@ -257,6 +269,105 @@ def get_plan_status(ctx: Context, days_back: int = 7, days_ahead: int = 7) -> di
         for w in weekly_status(ctx.plan, activities, ctx.today)[-3:]
     ]
     return {"sessions": sessions, "weeks": weeks}
+
+
+DEFAULT_ZONES = [{"name": "Easy", "max_bpm": 140}, {"name": "Moderate", "max_bpm": 160}, {"name": "Hard"}]
+
+
+def zones(ctx: Context) -> list[dict[str, Any]]:
+    """Heart rate zones from the config (intensity.zones); the first one ends at the easy cap by default."""
+    configured = ctx.cfg("intensity", "zones", None)
+    if configured:
+        return configured
+    easy_cap = ctx.cfg("intensity", "easy_hr_max", 140)
+    return [{**DEFAULT_ZONES[0], "max_bpm": easy_cap}, *DEFAULT_ZONES[1:]]
+
+
+def zone_labels(zone_list: list[dict[str, Any]]) -> list[str]:
+    """'Easy ≤ 140', 'Moderate 141–160', 'Hard > 160'."""
+    labels = []
+    for i, zone in enumerate(zone_list):
+        previous = zone_list[i - 1] if i else None
+        if "max_bpm" not in zone:
+            labels.append(f"{zone['name']} > {previous['max_bpm']:g}" if previous else zone["name"])
+        elif previous:
+            labels.append(f"{zone['name']} {previous['max_bpm'] + 1:g}–{zone['max_bpm']:g}")
+        else:
+            labels.append(f"{zone['name']} ≤ {zone['max_bpm']:g}")
+    return labels
+
+
+def get_zone_volume(ctx: Context, weeks: int = 8) -> list[dict[str, Any]]:
+    """Running km and minutes per heart rate zone and week, from the per-second samples.
+
+    Zone km are scaled to the run's recorded distance, so they add up to the weekly km.
+    """
+    zone_list = zones(ctx)
+    bounds = [z["max_bpm"] for z in zone_list[:-1]]
+    names = [z["name"].lower() for z in zone_list]
+    by_week: dict[date, dict[str, list[float]]] = {}
+    for a in _activities(ctx):
+        if not is_run(a):
+            continue
+        metres, seconds = zone_split(data.samples(ctx.conn, a["id"]), bounds)
+        total = sum(metres)
+        scale = (a.get("distance_m") or 0) / total if total else 0
+        week = by_week.setdefault(week_start(activity_date(a)), {"km": [0.0] * len(names), "min": [0.0] * len(names)})
+        for i in range(len(names)):
+            week["km"][i] += metres[i] * scale / 1000
+            week["min"][i] += seconds[i] / 60
+    result = []
+    for start in sorted(by_week)[-weeks:]:
+        week = by_week[start]
+        result.append(
+            {
+                "week_start": start.isoformat(),
+                **{f"{n}_km": round(km, 1) for n, km in zip(names, week["km"], strict=True)},
+                **{f"{n}_min": round(m) for n, m in zip(names, week["min"], strict=True)},
+            }
+        )
+    return result
+
+
+def get_plan_progress(ctx: Context) -> dict[str, Any]:
+    """Km planned up to today against km run since the plan started, in total and per plan week,
+    with the run km split into heart rate zones."""
+    if not ctx.plan or not ctx.plan.sessions:
+        return {"error": "no training plan (plan.yaml) configured"}
+    results = _evaluate(ctx, _activities(ctx))
+    # Today's session counts as planned once it is done; until then it may still be run.
+    planned = sum(planned_km(r.session) for r in results if r.session.date < ctx.today or r.activity_id is not None)
+    plan_start = week_start(ctx.plan.sessions[0].date)
+    names = [z["name"].lower() for z in zones(ctx)]
+    zone_weeks = {w["week_start"]: w for w in get_zone_volume(ctx, weeks=520) if w["week_start"] >= str(plan_start)}
+    plan_weeks = {w.start: w for w in ctx.plan.weeks}
+    weeks = []
+    # Weeks without a weekly target in plan.yaml still show up with the sum of their sessions.
+    for start in sorted(set(plan_weeks) | {week_start(s.date) for s in ctx.plan.sessions}):
+        sessions_km = round(sum(planned_km(s) for s in ctx.plan.sessions if week_start(s.date) == start), 1)
+        w = plan_weeks.get(start)
+        zw = zone_weeks.get(start.isoformat(), {})
+        weeks.append(
+            {
+                "week_start": start.isoformat(),
+                "label": w.label if w else None,
+                "planned_km": list(w.km) if w else [sessions_km, sessions_km],
+                "sessions_km": sessions_km,
+                "done_km": round(sum(zw.get(f"{n}_km", 0) for n in names), 1),
+                **{f"{n}_km": zw.get(f"{n}_km", 0) for n in names},
+                "future": start > ctx.today,
+            }
+        )
+    done = {n: round(sum(w.get(f"{n}_km", 0) for w in zone_weeks.values()), 1) for n in names}
+    return {
+        "plan_start": plan_start.isoformat(),
+        "planned_km_to_date": round(planned, 1),
+        "done_km": round(sum(done.values()), 1),
+        "done_by_zone_km": done,
+        "planned_km_total": round(sum(planned_km(s) for s in ctx.plan.sessions), 1),
+        "zones": zone_labels(zones(ctx)),
+        "weeks": weeks,
+    }
 
 
 def get_countdown(ctx: Context) -> list[dict[str, Any]]:

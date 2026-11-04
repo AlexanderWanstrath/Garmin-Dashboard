@@ -28,6 +28,12 @@ intensity:
   easy_hr_max: 140               # easy runs stay below this
   long_hr_max: 145               # long runs stay below this
   easy_share_min: 0.8            # share of moving time below the cap for a run to count as easy
+  # Heart rate zones for the km-per-zone charts; the last zone has no upper limit.
+  # Default: Easy up to easy_hr_max, Moderate up to 160, Hard above.
+  # zones:
+  #   - {name: Easy, max_bpm: 140}
+  #   - {name: Moderate, max_bpm: 160}
+  #   - {name: Hard}
 
 # Morning check: traffic light per signal. The worst signal decides the day.
 morning_check:

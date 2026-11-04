@@ -49,7 +49,8 @@ def test_demo_shows_the_built_in_deviations(demo):
     findings = [f for row in dash.plan_rows for f in row["findings"]]
     assert any(f.startswith("too fast") for f in findings)
     assert "last rep was the fastest" in findings
-    assert all(c.empty is None for c in dash.charts)  # every chart has data
+    charts = dash.overview_charts + dash.plan_charts + dash.health_charts
+    assert len(charts) == 11 and all(c.empty is None for c in charts)  # every chart has data
     assert dash.morning["level"] is not None
 
 

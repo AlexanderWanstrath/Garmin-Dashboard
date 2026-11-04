@@ -86,6 +86,18 @@ def test_no_match_before_plan_start_or_from_the_past_for_today():
     assert [r.status for r in results] == ["done", "upcoming"]
 
 
+def test_runs_of_the_same_day_add_up():
+    """Warm-up, test and cool-down recorded as three activities count for one session."""
+    plan = Plan([], [Session(TUE, "R", "5 km test", km=(9, 10))])
+    acts = [run(1, TUE, 2), run(2, TUE, 5, avg_moving_speed=1000 / 232), run(3, TUE, 2.5)]
+    (result,) = evaluate(plan, acts, today=TUE + timedelta(days=1))
+    assert result.activity_id == 2
+    assert sorted(result.activity_ids) == [1, 2, 3]
+    assert result.actual_km == 9.5
+    assert result.findings == []
+    assert format_pace(result.pace_s) == "3:52"
+
+
 def test_status_missed_and_upcoming():
     plan = Plan([], [Session(TUE, "E", "E"), Session(TUE + timedelta(days=3), "E", "E")])
     results = evaluate(plan, [], today=TUE + timedelta(days=3))

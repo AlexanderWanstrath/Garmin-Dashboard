@@ -5,6 +5,9 @@
 # pace: [fastest, slowest] per km for the main part. For easy and long runs the fastest
 #       value is a cap: running faster is flagged.
 # reps: work intervals of a quality session; compared with the laps the watch marks as "active".
+# previous_weeks (optional): weekly targets of an earlier plan, only drawn in gray in the weekly distance chart.
+#   previous_weeks:
+#     - {start: 2029-12-02, km: 35}
 
 weeks:
   - {start: 2030-01-07, km: [40, 45]}

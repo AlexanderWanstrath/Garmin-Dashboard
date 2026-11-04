@@ -1,5 +1,9 @@
 """Collect the data for the dashboard and render it into one static HTML file.
 
+The file has three pages, switched with tabs: overview (morning check, plan of the coming days,
+recent runs, volume), marathon plan (planned against run km, per zone) and health (HRV, resting
+heart rate, sleep, VO2max, decoupling, efficiency).
+
 Charts are Plotly figures written as plain JSON. Colors are CSS tokens like "var(--series-1)",
 which the page resolves for the active light or dark theme, so one file serves both modes.
 All numbers come from runlog.tools, the same queries the MCP server answers with.
@@ -15,7 +19,7 @@ from typing import Any
 from jinja2 import Environment, select_autoescape
 
 from runlog import data, tools
-from runlog.metrics import activity_date, is_run, week_start
+from runlog.metrics import activity_date, is_run, mean, week_start
 from runlog.metrics.decoupling import decoupling_pct
 from runlog.metrics.efficiency import efficiency_factor, is_easy_by_hr
 from runlog.plan import TYPES
@@ -26,9 +30,12 @@ RECOVERY_DAYS = 60
 SLEEP_NIGHTS = 30
 PLAN_DAYS_BACK = 14
 PLAN_DAYS_AHEAD = 7
+ALL_DAYS = 3650
 
 S1, S2, S3, S4 = (f"var(--series-{i})" for i in range(1, 5))
 MUTED, PLAN, BAND, SURFACE = "var(--muted)", "var(--plan)", "var(--band)", "var(--surface-1)"
+# Heart rate zones from easy to hard: green, amber, orange, then blue for a fourth zone.
+ZONE_COLORS = [S3, S4, S2, S1]
 
 
 @dataclass
@@ -46,6 +53,9 @@ class Chart:
     layout: dict[str, Any]
     table: Table
     empty: str | None = None  # shown instead of the plot when there is nothing to draw
+    note: str = ""  # plain-language explanation below the subtitle
+    height: int = 280
+    wide: bool = False  # spans both grid columns
 
 
 @dataclass
@@ -59,14 +69,19 @@ class Tile:
 @dataclass
 class Dashboard:
     today: date
-    hero: Tile
-    tiles: list[Tile]
+    week: Tile
+    countdown: list[Tile]
     morning: dict[str, Any]
-    warnings: list[str]
+    wellness: list[Tile]  # sleep and body battery next to the morning check
+    advice: list[str]  # warnings and recommendations below the morning check
     plan_rows: list[dict[str, Any]]
-    plan_weeks: list[dict[str, Any]]
     runs: list[dict[str, Any]]
-    charts: list[Chart] = field(default_factory=list)
+    progress: dict[str, Any] | None = None
+    plan_weeks: list[dict[str, Any]] = field(default_factory=list)  # all plan weeks with their sessions
+    health_tiles: list[Tile] = field(default_factory=list)
+    overview_charts: list[Chart] = field(default_factory=list)
+    plan_charts: list[Chart] = field(default_factory=list)
+    health_charts: list[Chart] = field(default_factory=list)
 
 
 # --- helpers -----------------------------------------------------------------
@@ -141,6 +156,14 @@ def _target_line(y: float, label: str) -> tuple[dict[str, Any], dict[str, Any]]:
     return shape, note
 
 
+def _zone_keys(ctx: tools.Context) -> list[tuple[str, str, str]]:
+    """(field prefix, label, color) per heart rate zone."""
+    zone_list = tools.zones(ctx)
+    labels = tools.zone_labels(zone_list)
+    colors = ZONE_COLORS + [MUTED] * max(0, len(zone_list) - len(ZONE_COLORS))
+    return [(z["name"].lower(), label, color) for z, label, color in zip(zone_list, labels, colors, strict=False)]
+
+
 # --- data --------------------------------------------------------------------
 
 
@@ -153,75 +176,143 @@ def collect(ctx: tools.Context) -> Dashboard:
     warnings = tools.get_warnings(ctx)
     recovery = tools.get_recovery_status(ctx, days=RECOVERY_DAYS)
     runs = tools.get_recent_runs(ctx, days=HISTORY_DAYS)
+    zone_weeks = tools.get_zone_volume(ctx, weeks=60)
     plan_status = tools.get_plan_status(ctx, PLAN_DAYS_BACK, PLAN_DAYS_AHEAD) if ctx.plan else None
-
-    # Hero: this week's km against the plan.
-    this_week = weeks[-1] if weeks else None
-    plan_week = next((w for w in (plan_status or {}).get("weeks", []) if w["status"] == "in progress"), None)
-    planned = ""
-    if plan_week:
-        low, high = plan_week["planned_km"]
-        planned = f"of {low:g} km planned" if low == high else f"of {low:g}–{high:g} km planned"
-    hero = Tile(
-        "This week",
-        f"{this_week['distance_km']:.1f} km" if this_week else "0 km",
-        f"{planned}{' · ' if planned else ''}{this_week['runs'] if this_week else 0} runs",
-    )
-
-    check = warnings["morning_check"]
-    last_rec = recovery[-1] if recovery else {}
-    vo2 = next((r["vo2max"] for r in reversed(runs) if r.get("vo2max")), None)
-    tiles = [
-        Tile("Morning check", (check["level"] or "no data").capitalize(), check.get("advice") or "", check["level"]),
-        Tile(
-            "HRV 7-day mean",
-            f"{_num(last_rec.get('hrv_7d_ms'), 0)} ms",
-            _baseline_text(last_rec.get("hrv_baseline_ms")),
-        ),
-        Tile("Resting HR 7-day mean", f"{_num(last_rec.get('resting_hr_7d_bpm'), 1)} bpm"),
-        Tile("VO2max", _num(vo2), "from the latest run"),
-    ]
-    upcoming = [e for e in countdown if e["days"] >= 0][:3]
-    tiles += [Tile(e["event"], "today" if e["days"] == 0 else f"{e['days']} days", _event_detail(e)) for e in upcoming]
-
-    plan_rows = []
-    for s in (plan_status or {}).get("sessions", []):
-        plan_rows.append(
-            {
-                "date": _short(s["date"]),
-                "weekday": date.fromisoformat(s["date"]).strftime("%a"),
-                "type": s["type"],
-                "session": s["session"],
-                "planned": _km_range(s["planned_km"]),
-                "actual": f"{s['actual_km']:g} km" if s["actual_km"] is not None else "",
-                "status": s["status"],
-                "findings": s["findings"],
-                "today": s["date"] == ctx.today.isoformat(),
-            }
-        )
+    progress = tools.get_plan_progress(ctx) if ctx.plan and ctx.plan.sessions else None
 
     dash = Dashboard(
         today=ctx.today,
-        hero=hero,
-        tiles=tiles,
-        morning=check,
-        warnings=warnings["training"],
-        plan_rows=plan_rows,
-        plan_weeks=(plan_status or {}).get("weeks", []),
+        week=_week_tile(weeks, plan_status),
+        countdown=[
+            Tile(e["event"], "today" if e["days"] == 0 else f"{e['days']} days", _event_detail(e))
+            for e in countdown
+            if e["days"] >= 0
+        ][:3],
+        morning=warnings["morning_check"],
+        wellness=_wellness(ctx),
+        advice=_advice(warnings),
+        plan_rows=[_plan_row(s, ctx.today) for s in (plan_status or {}).get("sessions", [])],
         runs=list(reversed([r for r in runs if r["date"] >= (ctx.today - timedelta(days=13)).isoformat()])),
+        progress=progress,
+        plan_weeks=_plan_weeks(ctx, progress),
+        health_tiles=_health_tiles(ctx, recovery, runs),
     )
-    dash.charts = [
-        weekly_volume_chart(weeks, ctx),
+    dash.overview_charts = [
         long_run_chart(weeks, ctx, long_km),
-        intensity_chart(tools.get_intensity_distribution(ctx, weeks=60), easy_cap),
-        decoupling_chart(ctx, long_km),
-        efficiency_chart(ctx, easy_cap),
-        vo2max_chart(runs),
+        weekly_volume_chart(weeks, ctx),
+        intensity_chart(zone_weeks, ctx, easy_cap),
+    ]
+    if progress:
+        dash.plan_charts = [plan_to_date_chart(progress, ctx), plan_weeks_chart(progress, ctx)]
+    dash.health_charts = [
         hrv_chart(recovery),
         resting_hr_chart(recovery, cfg),
         sleep_chart(ctx),
+        vo2max_chart(runs),
+        decoupling_chart(ctx, long_km),
+        efficiency_chart(ctx, easy_cap),
     ]
     return dash
+
+
+def _week_tile(weeks: list[dict[str, Any]], plan_status: dict[str, Any] | None) -> Tile:
+    this_week = weeks[-1] if weeks and weeks[-1]["in_progress"] else None
+    plan_week = next((w for w in (plan_status or {}).get("weeks", []) if w["status"] == "in progress"), None)
+    detail = f"{this_week['runs'] if this_week else 0} runs"
+    if plan_week:
+        detail = f"of {_km_range(plan_week['planned_km'])} planned · " + detail
+    return Tile("This week", f"{this_week['distance_km']:.1f} km" if this_week else "0 km", detail)
+
+
+def _wellness(ctx: tools.Context) -> list[Tile]:
+    today = next((d for d in data.daily_health(ctx.conn) if d["date"] == ctx.today.isoformat()), {})
+    sleep_detail = []
+    if today.get("sleep_score_quality"):
+        sleep_detail.append(str(today["sleep_score_quality"]).replace("_", " ").lower())
+    if today.get("sleep_s"):
+        hours, minutes = divmod(round(today["sleep_s"] / 60), 60)
+        sleep_detail.append(f"{hours} h {minutes:02d} min asleep")
+    battery_detail = f"now {today['body_battery_latest']}" if today.get("body_battery_latest") is not None else ""
+    return [
+        Tile("Sleep score", _num(today.get("sleep_score")), " · ".join(sleep_detail)),
+        Tile(
+            "Body Battery",
+            _num(today.get("body_battery_max")),
+            "highest today" + (f" · {battery_detail}" if battery_detail else ""),
+        ),
+    ]
+
+
+def _advice(warnings: dict[str, Any]) -> list[str]:
+    check = warnings["morning_check"]
+    items = [check["advice"]] if check.get("advice") else []
+    items += warnings["training"]
+    for d in warnings.get("plan_deviations_last_7_days", []):
+        what = "; ".join(d["findings"]) if d["findings"] else d["status"]
+        items.append(f"{_short(d['date'])} {d['session']}: {what}")
+    return items
+
+
+def _plan_row(s: dict[str, Any], today: date) -> dict[str, Any]:
+    day = date.fromisoformat(s["date"])
+    actual_km = f"{s['actual_km']:g} km" if s["actual_km"] is not None else ""
+    if actual_km and len(s.get("activity_ids") or []) > 1:
+        actual_km += f" ({len(s['activity_ids'])} runs)"
+    if s["status"] == "moved" and s.get("actual_date"):
+        actual_km += f", on {_short(s['actual_date'])}"
+    return {
+        "date": _short(day),
+        "weekday": day.strftime("%a"),
+        "type": s["type"],
+        "session": s["session"],
+        "target": s.get("target") or "",
+        "planned": _km_range(s["planned_km"]),
+        "actual_km": actual_km,
+        "actual": s.get("actual") or "",
+        "status": s["status"],
+        "findings": s["findings"],
+        "today": day == today,
+    }
+
+
+def _plan_weeks(ctx: tools.Context, progress: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Every plan week with its sessions, for the table on the plan page."""
+    if not progress:
+        return []
+    status = tools.get_plan_status(ctx, ALL_DAYS, ALL_DAYS)
+    rows = [_plan_row(s, ctx.today) for s in status["sessions"]]
+    result = []
+    for w in progress["weeks"]:
+        start = date.fromisoformat(w["week_start"])
+        result.append(
+            {
+                **w,
+                "title": f"Week of {_short(start)}" + (f" · {w['label']}" if w["label"] else ""),
+                "planned": _km_range(w["planned_km"]),
+                "current": start <= ctx.today < start + timedelta(days=7),
+                "sessions": [
+                    r
+                    for r, s in zip(rows, status["sessions"], strict=True)
+                    if week_start(date.fromisoformat(s["date"])) == start
+                ],
+            }
+        )
+    return result
+
+
+def _health_tiles(ctx: tools.Context, recovery: list[dict[str, Any]], runs: list[dict[str, Any]]) -> list[Tile]:
+    last = recovery[-1] if recovery else {}
+    week = recovery[-7:]
+    vo2 = next((r for r in reversed(runs) if r.get("vo2max")), None)
+    sleep = mean([r["sleep_score"] for r in week])
+    battery = mean([r["body_battery_max"] for r in week])
+    return [
+        Tile("HRV 7-day mean", f"{_num(last.get('hrv_7d_ms'), 0)} ms", _baseline_text(last.get("hrv_baseline_ms"))),
+        Tile("Resting HR 7-day mean", f"{_num(last.get('resting_hr_7d_bpm'), 1)} bpm"),
+        Tile("VO2max", _num(vo2["vo2max"]) if vo2 else "–", f"run of {_short(vo2['date'])}" if vo2 else ""),
+        Tile("Sleep score 7-day mean", _num(sleep, 0)),
+        Tile("Body Battery 7-day mean", _num(battery, 0), "highest value per day"),
+    ]
 
 
 def _baseline_text(baseline: Any) -> str:
@@ -243,7 +334,8 @@ def _km_range(value: Any) -> str:
 
 
 def _plan_week_km(ctx: tools.Context) -> dict[str, float]:
-    return {w.start.isoformat(): w.km[1] for w in ctx.plan.weeks} if ctx.plan else {}
+    weeks = (ctx.plan.previous_weeks + ctx.plan.weeks) if ctx.plan else []
+    return {w.start.isoformat(): w.km[1] for w in weeks}
 
 
 def _plan_long_km(ctx: tools.Context) -> dict[str, float]:
@@ -255,13 +347,18 @@ def _plan_long_km(ctx: tools.Context) -> dict[str, float]:
     return result
 
 
-# --- charts ------------------------------------------------------------------
+# --- overview charts ---------------------------------------------------------
 
 
 def weekly_volume_chart(weeks: list[dict[str, Any]], ctx: tools.Context) -> Chart:
     plan = _plan_week_km(ctx)
     x = [_short(w["week_start"]) for w in weeks]
-    data_ = [
+    data_ = []
+    if plan:
+        data_.append(
+            _bars(x, [plan.get(w["week_start"]) for w in weeks], "Plan", PLAN, "Plan, week of %{x}: %{y:g} km")
+        )
+    data_.append(
         _bars(
             x,
             [w["distance_km"] for w in weeks],
@@ -270,11 +367,7 @@ def weekly_volume_chart(weeks: list[dict[str, Any]], ctx: tools.Context) -> Char
             "Week of %{x}: %{y:.1f} km<br>%{customdata[0]} runs · %{customdata[1]} vs 3-week mean",
             customdata=[[w["runs"], _signed(w["change_vs_3_week_mean_pct"])] for w in weeks],
         )
-    ]
-    if plan:
-        data_.append(
-            _bars(x, [plan.get(w["week_start"]) for w in weeks], "Plan", PLAN, "Plan, week of %{x}: %{y:g} km")
-        )
+    )
     rows = [
         [
             w["week_start"],
@@ -289,7 +382,7 @@ def weekly_volume_chart(weeks: list[dict[str, Any]], ctx: tools.Context) -> Char
     return Chart(
         "volume",
         "Weekly distance",
-        "Running km per week (Mon–Sun) against the plan",
+        "Running km per week (Mon–Sun); plan in gray, including an earlier plan if plan.yaml lists one",
         data_,
         {"barmode": "group", "yaxis": {"ticksuffix": " km"}},
         Table(["Week", "km", "Plan km", "Runs", "vs prev. week", "vs 3-week mean"], rows),
@@ -299,9 +392,10 @@ def weekly_volume_chart(weeks: list[dict[str, Any]], ctx: tools.Context) -> Char
 def long_run_chart(weeks: list[dict[str, Any]], ctx: tools.Context, long_km: float) -> Chart:
     plan = _plan_long_km(ctx)
     x = [_short(w["week_start"]) for w in weeks]
-    data_ = [_bars(x, [w["longest_run_km"] for w in weeks], "Longest run", S1, "Week of %{x}: %{y:.1f} km")]
+    data_ = []
     if plan:
         data_.append(_bars(x, [plan.get(w["week_start"]) for w in weeks], "Planned long run", PLAN, "Plan: %{y:g} km"))
+    data_.append(_bars(x, [w["longest_run_km"] for w in weeks], "Longest run", S1, "Week of %{x}: %{y:.1f} km"))
     rows = [[w["week_start"], w["longest_run_km"], plan.get(w["week_start"], "–")] for w in weeks]
     return Chart(
         "longrun",
@@ -313,33 +407,127 @@ def long_run_chart(weeks: list[dict[str, Any]], ctx: tools.Context, long_km: flo
     )
 
 
-def intensity_chart(weeks: list[dict[str, Any]], easy_cap: float) -> Chart:
-    key = f"easy_below_{easy_cap}_bpm_pct"
-    x = [w["week_start"] for w in weeks]
-    trace = _line(
-        x,
-        [w[key] for w in weeks],
-        "Easy share",
-        S1,
-        "Week of %{x|%d.%m.}: %{y:.0f} % easy<br>%{customdata[0]} min easy · %{customdata[1]} min hard",
-    )
-    trace["customdata"] = [[w["easy_min"], w["hard_min"]] for w in weeks]
-    shape, note = _target_line(80, "Target 80 %")
-    rows = [[w["week_start"], w[key], w["easy_min"], w["hard_min"], w["easy_by_garmin_zones_pct"]] for w in weeks]
+def intensity_chart(zone_weeks: list[dict[str, Any]], ctx: tools.Context, easy_cap: float) -> Chart:
+    keys = _zone_keys(ctx)
+    x = [w["week_start"] for w in zone_weeks]
+    totals = [sum(w[f"{k}_min"] for k, _, _ in keys) for w in zone_weeks]
+    data_ = []
+    for key, label, color in keys:
+        minutes = [w[f"{key}_min"] for w in zone_weeks]
+        trace = _bars(
+            x,
+            [round(m / t * 100, 1) if t else None for m, t in zip(minutes, totals, strict=True)],
+            label,
+            color,
+            f"Week of %{{x|%d.%m.}}<br>{label} bpm: %{{y:.0f}} % · %{{customdata}} min",
+            customdata=minutes,
+        )
+        data_.append(trace)
+    shape, note = _target_line(80, "Target: 80 % easy")
+    rows = [[w["week_start"], *(w[f"{k}_min"] for k, _, _ in keys), t] for w, t in zip(zone_weeks, totals, strict=True)]
     return Chart(
         "intensity",
         "Intensity distribution",
-        f"Share of moving time at or below {easy_cap:g} bpm per week",
-        [trace],
+        f"Share of moving time per heart rate zone and week; the easy part (≤ {easy_cap:g} bpm) should reach 80 %",
+        data_,
         {
-            "yaxis": {"range": [0, 105], "ticksuffix": " %"},
+            "barmode": "stack",
+            "yaxis": {"range": [0, 100], "ticksuffix": " %"},
             "xaxis": {"type": "date", "tickformat": "%d.%m."},
             "shapes": [shape],
             "annotations": [note],
-            "showlegend": False,
+            "legend": {"traceorder": "normal"},
+            "bargap": 0.3,
         },
-        Table(["Week", "Easy %", "Easy min", "Hard min", "Easy % by Garmin zones"], rows),
+        Table(["Week", *(f"{label} min" for _, label, _ in keys), "Total min"], rows),
+        empty=None if zone_weeks else "No runs with heart rate yet.",
+        wide=True,
     )
+
+
+# --- plan charts -------------------------------------------------------------
+
+
+def plan_to_date_chart(progress: dict[str, Any], ctx: tools.Context) -> Chart:
+    keys = _zone_keys(ctx)
+    planned, done = progress["planned_km_to_date"], progress["done_km"]
+    data_ = [_bars([planned], ["Plan"], "Planned to date", PLAN, "Planned up to today: %{x:.1f} km", orientation="h")]
+    for key, label, color in keys:
+        km = progress["done_by_zone_km"].get(key, 0)
+        data_.append(
+            _bars([km], ["Run"], label, color, f"{label} bpm: %{{x:.1f}} km of {done:.1f} km", orientation="h")
+        )
+    rows = [["Planned to date", planned]] + [[label, progress["done_by_zone_km"].get(k, 0)] for k, label, _ in keys]
+    rows.append(["Run in total", done])
+    diff = done - planned
+    return Chart(
+        "plan-to-date",
+        "Plan up to today",
+        f"{done:.1f} km run against {planned:.1f} km planned since {_short(progress['plan_start'])} "
+        f"({diff:+.1f} km), run km split into heart rate zones",
+        data_,
+        {
+            "barmode": "stack",
+            "xaxis": {"ticksuffix": " km", "showgrid": True, "rangemode": "tozero"},
+            "yaxis": {"showgrid": False, "autorange": "reversed"},
+            "legend": {"traceorder": "normal"},
+            "bargap": 0.35,
+            "hovermode": "closest",
+        },
+        Table(["", "km"], rows),
+        height=200,
+        wide=True,
+    )
+
+
+def plan_weeks_chart(progress: dict[str, Any], ctx: tools.Context) -> Chart:
+    """Planned (gray) next to run km stacked by zone. Grouped and stacked at once needs explicit bases."""
+    keys = _zone_keys(ctx)
+    weeks = progress["weeks"]
+    x = [_short(w["week_start"]) + (f" {w['label']}" if w["label"] else "") for w in weeks]
+    data_ = [
+        _bars(
+            x,
+            [w["planned_km"][1] for w in weeks],
+            "Plan",
+            PLAN,
+            "%{x}: %{customdata} planned",
+            customdata=[_km_range(w["planned_km"]) for w in weeks],
+            offsetgroup="plan",
+        )
+    ]
+    base = [0.0] * len(weeks)
+    for key, label, color in keys:
+        km = [None if w["future"] else w[f"{key}_km"] for w in weeks]
+        data_.append(
+            _bars(
+                x,
+                km,
+                label,
+                color,
+                f"%{{x}}<br>{label} bpm: %{{y:.1f}} km",
+                base=list(base),
+                offsetgroup="run",
+            )
+        )
+        base = [b + (k or 0) for b, k in zip(base, km, strict=True)]
+    rows = [
+        [w["week_start"], w["label"] or "", _km_range(w["planned_km"]), w["sessions_km"], w["done_km"]]
+        + [w[f"{k}_km"] for k, _, _ in keys]
+        for w in weeks
+    ]
+    return Chart(
+        "plan-weeks",
+        "Weekly km against the plan",
+        "Planned week (gray) next to the km run, split into heart rate zones",
+        data_,
+        {"barmode": "group", "yaxis": {"ticksuffix": " km"}, "legend": {"traceorder": "normal"}},
+        Table(["Week", "Label", "Planned", "Sessions km", "Run km", *(f"{label} km" for _, label, _ in keys)], rows),
+        wide=True,
+    )
+
+
+# --- health charts -----------------------------------------------------------
 
 
 def decoupling_chart(ctx: tools.Context, long_km: float) -> Chart:
@@ -362,7 +550,7 @@ def decoupling_chart(ctx: tools.Context, long_km: float) -> Chart:
     return Chart(
         "decoupling",
         "Aerobic decoupling of long runs",
-        f"Pa:HR drift between the two halves, runs from {long_km:g} km, warm-up excluded",
+        f"Runs from {long_km:g} km, first {warmup_s // 60:g} minutes left out",
         [trace],
         {
             "yaxis": {"ticksuffix": " %"},
@@ -373,6 +561,9 @@ def decoupling_chart(ctx: tools.Context, long_km: float) -> Chart:
         },
         Table(["Date", "Decoupling %", "km"], [list(p) for p in points]),
         empty=None if points else f"No runs of {long_km:g} km or more yet.",
+        note="How much the heart rate drifts up in the second half of a long run at the same pace. "
+        "Below 5 % means your aerobic base carries the distance; higher values mean you got tired, "
+        "it was hot, or you lacked fuel or fluids.",
     )
 
 
@@ -396,12 +587,14 @@ def efficiency_chart(ctx: tools.Context, easy_cap: float) -> Chart:
     return Chart(
         "efficiency",
         "Efficiency factor of easy runs",
-        f"Speed (m/min) per heartbeat on runs with at least {share:.0%} of moving time ≤ {easy_cap:g} bpm; "
-        "rising means fitter",
+        f"Runs with at least {share:.0%} of moving time ≤ {easy_cap:g} bpm",
         [trace],
         {"xaxis": {"type": "date", "tickformat": "%d.%m."}, "yaxis": {"rangemode": "normal"}, "showlegend": False},
         Table(["Date", "EF", "km"], [list(p) for p in points]),
         empty=None if points else "No easy runs yet.",
+        note="Speed (metres per minute) divided by heart rate. If you run faster at the same heart rate, "
+        "or at a lower heart rate at the same pace, the value rises: your aerobic fitness is improving. "
+        "Single runs vary with heat, hills and fatigue, so watch the trend over weeks.",
     )
 
 
@@ -455,7 +648,7 @@ def hrv_chart(recovery: list[dict[str, Any]]) -> Chart:
     return Chart(
         "hrv",
         "HRV",
-        "Nightly average and 7-day mean against Garmin's baseline range",
+        "Nightly average and 7-day mean against the baseline range",
         data_,
         {
             "xaxis": {"type": "date", "tickformat": "%d.%m."},
@@ -548,9 +741,15 @@ def _signed(value: Any) -> str:
 def render(dash: Dashboard) -> str:
     env = Environment(autoescape=select_autoescape(default=True), trim_blocks=True, lstrip_blocks=True)
     template = env.from_string((resources.files("runlog.dashboard") / "template.html.j2").read_text(encoding="utf-8"))
+    pages = {
+        "overview": [asdict(c) for c in dash.overview_charts],
+        "plan": [asdict(c) for c in dash.plan_charts],
+        "health": [asdict(c) for c in dash.health_charts],
+    }
     return template.render(
         d=dash,
-        charts=[asdict(c) for c in dash.charts],
+        pages=pages,
+        charts=[{**c, "page": page} for page, charts in pages.items() for c in charts],
         plotly_js=PLOTLY_JS,
         types=TYPES,
     )
